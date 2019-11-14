@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<features name="openmms-grpc-features" xmlns="http://karaf.apache.org/xmlns/features/v1.4.0">
+
+
+  <feature name="opennms-grpc-shaded" description="GRPC :: Shaded" version="${project.version}">
+    <bundle>mvn:org.opennms.grpc/grpc-shaded/${project.version}</bundle>
+    <bundle>mvn:org.opennms.grpc/org.opennms.grpc.common/${project.version}</bundle>
+  </feature>
+
+  <feature name="opennms-grpc-server" description="OpenNMS :: GRPC :: Server" version="${project.version}">
+    <feature dependency="true">aries-blueprint</feature>
+    <feature>opennms-grpc-shaded</feature>
+    <bundle>mvn:org.opennms.grpc/org.opennms.grpc.onms/${project.version}</bundle>
+    <bundle>mvn:com.google.guava/guava/${guava.version}</bundle>
+  </feature>
+
+  <feature name="opennms-grpc-client" description="OpenNMS :: GRPC :: Client" version="${project.version}">
+    <feature dependency="true">aries-blueprint</feature>
+    <feature>opennms-grpc-shaded</feature>
+    <bundle>mvn:org.opennms.grpc/org.opennms.grpc.minion/${project.version}</bundle>
+  </feature>
+
+</features>
