@@ -34,8 +34,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.opennms.core.ipc.common.Empty;
 import org.opennms.core.ipc.common.OnmsIpcGrpc;
 import org.opennms.core.ipc.common.RpcMessage;
+import org.opennms.core.ipc.common.SinkMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +62,7 @@ public class OnmsGrpcServer {
 
     public OnmsGrpcServer(int port) {
         this.server = ServerBuilder.forPort(port)
-                .addService(new OnmsIpcRpcService()).build();
+                .addService(new OnmsIpcService()).build();
     }
 
     public void start() throws IOException {
@@ -74,7 +76,7 @@ public class OnmsGrpcServer {
     }
 
 
-    private class OnmsIpcRpcService extends OnmsIpcGrpc.OnmsIpcImplBase {
+    private class OnmsIpcService extends OnmsIpcGrpc.OnmsIpcImplBase {
 
         @Override
         public StreamObserver<RpcMessage> rpcStreaming(
@@ -85,6 +87,7 @@ public class OnmsGrpcServer {
                 @Override
                 public void onNext(RpcMessage rpcMessage) {
                     // Register client when message is metadata.
+                    LOG.debug("Received RPC message from module {}", rpcMessage.getModuleId());
                     if (isMetadata(rpcMessage)) {
                         String location = rpcMessage.getLocation();
                         String systemId = rpcMessage.getSystemId();
@@ -101,6 +104,27 @@ public class OnmsGrpcServer {
                 @Override
                 public void onCompleted() {
                     removeResponseObserver(responseObserver);
+                }
+            };
+        }
+
+        public io.grpc.stub.StreamObserver<SinkMessage> sinkStreaming(
+                io.grpc.stub.StreamObserver<Empty> responseObserver) {
+
+            return new StreamObserver<SinkMessage>() {
+                @Override
+                public void onNext(SinkMessage value) {
+                  LOG.debug("Received sink message from module {}", value.getModuleId());
+                }
+
+                @Override
+                public void onError(Throwable t) {
+
+                }
+
+                @Override
+                public void onCompleted() {
+
                 }
             };
         }

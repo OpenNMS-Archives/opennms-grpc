@@ -31,16 +31,16 @@ package org.opennms.core.ipc.client;
 public class MinionIpcClientRunner {
 
     public static void main(String[] args) throws InterruptedException {
-        MinionGrpcClient minionIpcClient = new MinionGrpcClient("MINION", "1001", "localhost", 8981);
-        MinionGrpcClient minionIpcClient1 = new MinionGrpcClient("MINION", "1002", "localhost", 8981);
-        MinionGrpcClient minionIpcClient2 = new MinionGrpcClient("MINION", "1003", "localhost", 8981);
+        MinionIpcClient minionIpcClient = new MinionIpcClient("MINION", "1001", "localhost", 8981);
+        MinionIpcClient minionIpcClient1 = new MinionIpcClient("MINION", "1002", "localhost", 8981);
+        MinionIpcClient minionIpcClient2 = new MinionIpcClient("MINION", "1003", "localhost", 8981);
         minionIpcClient.start();
         minionIpcClient1.start();
         minionIpcClient2.start();
         Thread.sleep(5000);
-        MinionGrpcClient minionIpcClient3 = new MinionGrpcClient("Apex", "1004", "localhost", 8981);
-        MinionGrpcClient minionIpcClient4 = new MinionGrpcClient("Apex", "1005", "localhost", 8981);
-        MinionGrpcClient minionIpcClient5 = new MinionGrpcClient("Apex", "1006", "localhost", 8981);
+        MinionIpcClient minionIpcClient3 = new MinionIpcClient("Apex", "1004", "localhost", 8981);
+        MinionIpcClient minionIpcClient4 = new MinionIpcClient("Apex", "1005", "localhost", 8981);
+        MinionIpcClient minionIpcClient5 = new MinionIpcClient("Apex", "1006", "localhost", 8981);
         minionIpcClient3.start();
         minionIpcClient4.start();
         minionIpcClient5.start();

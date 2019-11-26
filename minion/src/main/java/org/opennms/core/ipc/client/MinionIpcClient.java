@@ -32,48 +32,69 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import org.opennms.core.ipc.api.IpcSinkClient;
+import org.opennms.core.ipc.common.Empty;
 import org.opennms.core.ipc.common.OnmsIpcGrpc;
 import org.opennms.core.ipc.common.RpcMessage;
+import org.opennms.core.ipc.common.SinkMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 
-public class MinionGrpcClient {
+public class MinionIpcClient implements IpcSinkClient {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MinionGrpcClient.class);
-    private static final String HEARTBEAT_MODULE_ID = "RPC-Heartbeat";
+    private static final Logger LOG = LoggerFactory.getLogger(MinionIpcClient.class);
+    private static final String RPC_HEARTBEAT = "RPC-Heartbeat";
+
     private static final long TIME_INTERVAL_HEARTBEAT = 5;
     private final ManagedChannel channel;
     private final OnmsIpcGrpc.OnmsIpcStub asyncStub;
     private String location;
     private String systemId;
-    private StreamObserver<RpcMessage> requestHandler;
+    private StreamObserver<RpcMessage> rpcResponseSender;
+    private StreamObserver<SinkMessage> sinkMessageSender;
+    private ConnectivityState channelState;
     private ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
 
-    public MinionGrpcClient(String location, String systemId, String host, int port) {
+    public MinionIpcClient(String location, String systemId, String host, int port) {
 
         this(ManagedChannelBuilder.forAddress(host, port)
+                .keepAliveWithoutCalls(true)
+                //.enableRetry()
+                //.maxRetryAttempts(100)
                 .usePlaintext());
         this.location = location;
         this.systemId = systemId;
     }
 
-    public MinionGrpcClient(ManagedChannelBuilder<?> channelBuilder) {
+    public MinionIpcClient(ManagedChannelBuilder<?> channelBuilder) {
         channel = channelBuilder.build();
         asyncStub = OnmsIpcGrpc.newStub(channel);
     }
 
     public void start() {
-        requestHandler = asyncStub.rpcStreaming(new RpcMessageHandler());
+        channelState = channel.getState(true);
+        if (channelState.equals(ConnectivityState.READY)) {
+            initializeRpcRequestHandler();
+            initializeSinkMessageSender();
+        }
         LOG.info("Minion at location {} with systemId {} started", location, systemId);
         // Start a thread that keeps sending heartbeat to OpenNMS
         executor.scheduleAtFixedRate(this::sendHeartBeat, 0, TIME_INTERVAL_HEARTBEAT, TimeUnit.SECONDS);
     }
 
+    public void initializeRpcRequestHandler() {
+        rpcResponseSender = asyncStub.rpcStreaming(new RpcMessageHandler());
+    }
+
+    public void initializeSinkMessageSender() {
+        sinkMessageSender = asyncStub.sinkStreaming(new EmptyMessageHandler());
+    }
 
     private class RpcMessageHandler implements StreamObserver<RpcMessage> {
 
@@ -88,7 +109,7 @@ public class MinionGrpcClient {
                     .setLocation(rpcMessage.getLocation())
                     .setModuleId(rpcMessage.getModuleId())
                     .setRpcContent(rpcMessage.getRpcContent());
-            requestHandler.onNext(rpcMessageBuilder.build());
+            rpcResponseSender.onNext(rpcMessageBuilder.build());
         }
 
         @Override
@@ -102,20 +123,61 @@ public class MinionGrpcClient {
         }
     }
 
+    /**
+     * Sink module doesn't expect any response from OpenNMS.
+     */
+    private class EmptyMessageHandler implements StreamObserver<Empty> {
+
+        @Override
+        public void onNext(Empty value) {
+
+        }
+
+        @Override
+        public void onError(Throwable t) {
+
+        }
+
+        @Override
+        public void onCompleted() {
+
+        }
+    }
+
     public void shutdown() {
         executor.shutdown();
-        requestHandler.onCompleted();
+        if(rpcResponseSender != null) {
+            rpcResponseSender.onCompleted();
+        }
         channel.shutdown();
         LOG.info("Minion at location {} with systemId {} stopped", location, systemId);
     }
 
     private void sendHeartBeat() {
-        RpcMessage.Builder rpcMessageBuilder = RpcMessage.newBuilder()
-                .setLocation(location)
-                .setSystemId(systemId)
-                .setModuleId(HEARTBEAT_MODULE_ID)
-                .setRpcId(systemId);
-        requestHandler.onNext(rpcMessageBuilder.build());
-        LOG.debug("Sending heartbeat to OpenNMS");
+        ConnectivityState currentState = channel.getState(true);
+        if (!channelState.equals(ConnectivityState.READY) && currentState.equals(ConnectivityState.READY)) {
+            LOG.info("Channel is in READY STATE");
+            initializeRpcRequestHandler();
+            initializeSinkMessageSender();
+        }
+        channelState = currentState;
+        if (rpcResponseSender != null) {
+            RpcMessage.Builder rpcMessageBuilder = RpcMessage.newBuilder()
+                    .setLocation(location)
+                    .setSystemId(systemId)
+                    .setModuleId(RPC_HEARTBEAT)
+                    .setRpcId(systemId);
+            rpcResponseSender.onNext(rpcMessageBuilder.build());
+            LOG.debug("Sending RPC Heartbeat to OpenNMS");
+        }
+    }
+
+
+    public StreamObserver<SinkMessage> getSinkMessageSender() {
+        return sinkMessageSender;
+    }
+
+    public StreamObserver<RpcMessage> getRpcResponseSender() {
+        return rpcResponseSender;
     }
 }
